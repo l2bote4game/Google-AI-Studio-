@@ -14,6 +14,7 @@ const aspectRatioSelect = document.getElementById('aspect-ratio-select') as HTML
 const numImagesSlider = document.getElementById('num-images-slider') as HTMLInputElement;
 const numImagesValue = document.getElementById('num-images-value');
 const generateBtn = document.getElementById('generate-btn') as HTMLButtonElement;
+const removeBgBtn = document.getElementById('remove-bg-btn') as HTMLButtonElement;
 const loader = document.getElementById('loader');
 const imageGallery = document.getElementById('image-gallery');
 
@@ -67,7 +68,8 @@ imageUploadInput?.addEventListener('change', async (event) => {
 
 // Main generate button click handler
 generateBtn?.addEventListener('click', async () => {
-    if (!promptInput.value.trim()) {
+    const isEditing = uploadedImages.length > 0;
+    if (!isEditing && !promptInput.value.trim()) {
         alert('Пожалуйста, введите промпт.');
         return;
     }
@@ -76,7 +78,7 @@ generateBtn?.addEventListener('click', async () => {
     clearGallery();
 
     try {
-        if (uploadedImages.length > 0) {
+        if (isEditing) {
             await editImage();
         } else {
             await generateImages();
@@ -89,12 +91,31 @@ generateBtn?.addEventListener('click', async () => {
     }
 });
 
+// Remove background button click handler
+removeBgBtn?.addEventListener('click', async () => {
+    if (uploadedImages.length === 0) {
+        alert('Пожалуйста, загрузите изображение для удаления фона.');
+        return;
+    }
+    setLoading(true);
+    clearGallery();
+    try {
+        await removeBackground();
+    } catch (error) {
+        console.error('Error removing background:', error);
+        displayError('Произошла ошибка при удалении фона.');
+    } finally {
+        setLoading(false);
+    }
+});
+
 
 // --- UI UPDATE FUNCTIONS ---
 
 function setLoading(isLoading: boolean) {
     loader?.classList.toggle('hidden', !isLoading);
     if (generateBtn) generateBtn.disabled = isLoading;
+    if (removeBgBtn) removeBgBtn.disabled = isLoading;
 }
 
 function clearGallery() {
@@ -112,6 +133,11 @@ function updateUiForMode() {
     const isEditing = uploadedImages.length > 0;
     if (aspectRatioSelect) aspectRatioSelect.disabled = isEditing;
     if (numImagesSlider) numImagesSlider.disabled = isEditing;
+    if (removeBgBtn) removeBgBtn.disabled = !isEditing;
+    
+    if (generateBtn) {
+        generateBtn.textContent = isEditing ? 'Редактировать с промптом' : 'Сгенерировать';
+    }
     
     const settings = document.querySelector('.settings-section') as HTMLElement;
     if(settings) {
@@ -186,6 +212,10 @@ async function generateImages() {
  */
 async function editImage() {
     if (uploadedImages.length === 0) return;
+    if (!promptInput.value.trim()) {
+        alert('Пожалуйста, введите промпт для редактирования.');
+        return;
+    }
 
     const imageParts = uploadedImages.map(image => ({
         inlineData: {
@@ -195,7 +225,7 @@ async function editImage() {
     }));
 
     const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash-image-preview',
+        model: 'gemini-2.5-flash-image',
         contents: {
             parts: [
                 ...imageParts,
@@ -203,7 +233,7 @@ async function editImage() {
             ],
         },
         config: {
-            responseModalities: [Modality.IMAGE, Modality.TEXT],
+            responseModalities: [Modality.IMAGE],
         },
     });
     
@@ -220,6 +250,47 @@ async function editImage() {
     }
 }
 
+/**
+ * Removes the background from the first uploaded image.
+ */
+async function removeBackground() {
+    if (uploadedImages.length === 0) return;
+
+    // Use only the first uploaded image for background removal.
+    const image = uploadedImages[0];
+    
+    const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash-image',
+        contents: {
+            parts: [
+                {
+                    inlineData: {
+                        data: image.base64,
+                        mimeType: image.mimeType,
+                    },
+                },
+                { text: 'remove the background, output a png with a transparent background' },
+            ],
+        },
+        config: {
+            responseModalities: [Modality.IMAGE],
+        },
+    });
+    
+    let imageFound = false;
+    for (const part of response.candidates[0].content.parts) {
+        if (part.inlineData) {
+            imageFound = true;
+            // The API should return a PNG for transparency.
+            appendImageToGallery(part.inlineData.data, 'Image with background removed', 'image/png');
+        }
+    }
+    
+    if(!imageFound) {
+         displayError('Не удалось удалить фон с изображения.');
+    }
+}
+
 
 // --- HELPER FUNCTIONS ---
 
@@ -227,11 +298,12 @@ async function editImage() {
  * Appends a base64 encoded image to the gallery.
  * @param base64String The base64 encoded image data.
  * @param altText The alt text for the image.
+ * @param mimeType The MIME type of the image, default is 'image/jpeg'.
  */
-function appendImageToGallery(base64String: string, altText: string) {
+function appendImageToGallery(base64String: string, altText: string, mimeType = 'image/jpeg') {
     if (!imageGallery) return;
 
-    const src = `data:image/jpeg;base64,${base64String}`;
+    const src = `data:${mimeType};base64,${base64String}`;
     const img = new Image();
     img.src = src;
     img.alt = altText;

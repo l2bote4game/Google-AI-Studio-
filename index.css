@@ -132,19 +132,34 @@ input[type="range"] {
   width: 100%;
 }
 
-#generate-btn {
+.actions-container {
+    display: flex;
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+#generate-btn, #remove-bg-btn {
+  flex: 1;
   padding: 0.8rem 1.5rem;
-  background-color: #bb86fc;
-  color: #121212;
   border: none;
   border-radius: 4px;
   font-size: 1.1rem;
   font-weight: bold;
   cursor: pointer;
-  transition: background-color 0.2s ease;
+  transition: background-color 0.2s ease, opacity 0.2s ease;
 }
 
-#generate-btn:disabled {
+#generate-btn {
+    background-color: #bb86fc;
+    color: #121212;
+}
+
+#remove-bg-btn {
+    background-color: #484848;
+    color: #e0e0e0;
+}
+
+#generate-btn:disabled, #remove-bg-btn:disabled {
   background-color: #333;
   color: #666;
   cursor: not-allowed;
@@ -152,6 +167,10 @@ input[type="range"] {
 
 #generate-btn:not(:disabled):hover {
   background-color: #9f6de0;
+}
+
+#remove-bg-btn:not(:disabled):hover {
+    background-color: #5a5a5a;
 }
 
 #gallery-container {
